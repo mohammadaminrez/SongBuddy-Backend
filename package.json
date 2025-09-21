@@ -1,5 +1,5 @@
 {
-  "name": "songbuddy-backend",
+  "name": "SongBuddy-Backend",
   "version": "1.0.0",
   "description": "SongBuddy Backend API - Node.js + Express + TypeScript + MongoDB for social music sharing platform",
   "main": "dist/app.js",
@@ -20,7 +20,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mohammadaminrez/songbuddy-backend.git"
+    "url": "git+https://github.com/mohammadaminrez/SongBuddy-Backend.git"
   },
   "keywords": [
     "nodejs",
@@ -37,9 +37,9 @@
   "license": "MIT",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/mohammadaminrez/songbuddy-backend/issues"
+    "url": "https://github.com/mohammadaminrez/SongBuddy-Backend/issues"
   },
-  "homepage": "https://github.com/mohammadaminrez/songbuddy-backend#readme",
+  "homepage": "https://github.com/mohammadaminrez/SongBuddy-Backend#readme",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
