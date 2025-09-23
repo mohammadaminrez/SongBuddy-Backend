@@ -18,6 +18,10 @@ export interface IUser extends Document {
     privacy: 'public' | 'private';
   };
   spotifyId?: string; // Optional Spotify ID for connected accounts
+  currentlyPlaying?: any;
+  topArtists?: any[];
+  topTracks?: any[];
+  recentlyPlayed?: any[];
   isActive: boolean;
   lastActiveAt: Date;
   createdAt: Date;

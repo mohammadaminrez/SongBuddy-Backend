@@ -66,6 +66,19 @@ const userSchema = new Schema<IUser>({
       default: 'public'
     }
   },
+  currentlyPlaying: {
+    type: Schema.Types.Mixed,
+    default: null
+  },
+  topArtists: [{
+    type: Schema.Types.Mixed
+  }],
+  topTracks: [{
+    type: Schema.Types.Mixed
+  }],
+  recentlyPlayed: [{
+    type: Schema.Types.Mixed
+  }],
   isActive: {
     type: Boolean,
     default: true

@@ -9,6 +9,17 @@ const router = express.Router();
 router.post('/save', async (req, res) => {
   try {
     const userData = req.body;
+    
+    // DEBUG: Log everything we receive
+    console.log('=== DEBUG USER SAVE ===');
+    console.log('Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('Headers:', req.headers);
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Raw body keys:', Object.keys(userData));
+    console.log('Country value:', userData.country);
+    console.log('Country type:', typeof userData.country);
+    console.log('========================');
+    
     logger.info('User save request:', userData);
 
     // Create new user and save to MongoDB
@@ -20,6 +31,10 @@ router.post('/save', async (req, res) => {
       profilePicture: userData.profilePicture || '',
       country: userData.country || '',
       bio: userData.bio || '',
+      currentlyPlaying: userData.currentlyPlaying || null,
+      topArtists: userData.topArtists || [],
+      topTracks: userData.topTracks || [],
+      recentlyPlayed: userData.recentlyPlayed || [],
       followers: [],
       following: [],
       preferences: {
@@ -32,6 +47,14 @@ router.post('/save', async (req, res) => {
     });
 
     const savedUser = await newUser.save();
+    
+    // DEBUG: Log what was actually saved
+    console.log('=== SAVED TO MONGODB ===');
+    console.log('Saved user ID:', savedUser._id);
+    console.log('Saved user country:', savedUser.country);
+    console.log('Full saved user:', JSON.stringify(savedUser, null, 2));
+    console.log('========================');
+    
     logger.info('User saved to MongoDB:', savedUser._id);
 
     res.json({
@@ -41,6 +64,13 @@ router.post('/save', async (req, res) => {
         id: savedUser.id,
         displayName: savedUser.displayName,
         email: savedUser.email,
+        country: savedUser.country,
+        username: savedUser.username,
+        bio: savedUser.bio,
+        currentlyPlaying: savedUser.currentlyPlaying,
+        topArtists: savedUser.topArtists,
+        topTracks: savedUser.topTracks,
+        recentlyPlayed: savedUser.recentlyPlayed,
         timestamp: new Date().toISOString()
       }
     });
@@ -68,6 +98,11 @@ router.get('/', async (req, res) => {
         id: user.id,
         displayName: user.displayName,
         email: user.email,
+        country: user.country,
+        currentlyPlaying: user.currentlyPlaying,
+        topArtists: user.topArtists,
+        topTracks: user.topTracks,
+        recentlyPlayed: user.recentlyPlayed,
         createdAt: user.createdAt
       }))
     });
