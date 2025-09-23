@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import { databaseService } from './services/database';
+import userRoutes from './routes/userRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -32,6 +33,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+
 // Simple test endpoint for Flutter connection
 app.get('/api/test', (req, res) => {
   res.json({
@@ -45,6 +47,73 @@ app.get('/api/test', (req, res) => {
   });
 });
 
+// Test POST endpoint for Flutter connection testing
+app.post('/api/test-post', async (req, res) => {
+  try {
+    const { message, data } = req.body;
+    const timestamp = new Date();
+    
+    logger.info('Test POST received:', { message, data, timestamp: timestamp.toISOString() });
+    
+    // Save to MongoDB for testing
+    const testMessage = {
+      message: message || 'No message provided',
+      data: data || 'No data provided',
+      timestamp: timestamp,
+      source: 'Flutter App Test',
+      ip: req.ip,
+      userAgent: req.get('User-Agent') || 'Unknown'
+    };
+    
+    // Import mongoose and save to a test collection
+    const mongoose = require('mongoose');
+    const TestMessage = mongoose.model('TestMessage', new mongoose.Schema({
+      message: String,
+      data: mongoose.Schema.Types.Mixed,
+      timestamp: Date,
+      source: String,
+      ip: String,
+      userAgent: String
+    }, { timestamps: true }));
+    
+    const savedMessage = await TestMessage.create(testMessage);
+    logger.info('Test message saved to MongoDB:', savedMessage._id);
+    
+    res.json({
+      success: true,
+      message: 'POST request received and saved to MongoDB!',
+      receivedData: {
+        message: message || 'No message provided',
+        data: data || 'No data provided',
+        timestamp: timestamp.toISOString()
+      },
+      serverResponse: {
+        server: 'SongBuddy Backend',
+        status: 'POST connection working',
+        method: 'POST',
+        savedToDB: true,
+        documentId: savedMessage._id
+      }
+    });
+  } catch (error) {
+    logger.error('Test POST error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing POST request',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Debug: Log all incoming requests to see what's happening
+app.use((req, res, next) => {
+  logger.info(`Incoming request: ${req.method} ${req.path}`);
+  next();
+});
+
+// API Routes
+app.use('/api/users', userRoutes);
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error('Unhandled error:', err);
@@ -56,7 +125,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Endpoint not found',

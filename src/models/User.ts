@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { IUser } from '../types';
 
 const userSchema = new Schema<IUser>({
-  spotifyId: {
+  id: {
     type: String,
     required: true,
     unique: true,
@@ -22,9 +22,20 @@ const userSchema = new Schema<IUser>({
     lowercase: true,
     trim: true
   },
+  username: {
+    type: String,
+    trim: true,
+    maxlength: 30,
+    sparse: true // Allows multiple null values but enforces uniqueness for non-null values
+  },
   profilePicture: {
     type: String,
     default: ''
+  },
+  country: {
+    type: String,
+    trim: true,
+    maxlength: 50
   },
   bio: {
     type: String,
@@ -70,8 +81,9 @@ const userSchema = new Schema<IUser>({
 });
 
 // Indexes for better performance
-userSchema.index({ spotifyId: 1 });
+userSchema.index({ id: 1 });
 userSchema.index({ email: 1 });
+userSchema.index({ username: 1 }, { sparse: true });
 userSchema.index({ displayName: 'text' });
 userSchema.index({ createdAt: -1 });
 
@@ -119,12 +131,16 @@ userSchema.methods.updateLastActive = async function(): Promise<void> {
 };
 
 // Static methods
-userSchema.statics.findBySpotifyId = function(spotifyId: string) {
-  return this.findOne({ spotifyId });
+userSchema.statics.findById = function(id: string) {
+  return this.findOne({ id });
 };
 
 userSchema.statics.findByEmail = function(email: string) {
   return this.findOne({ email: email.toLowerCase() });
+};
+
+userSchema.statics.findByUsername = function(username: string) {
+  return this.findOne({ username });
 };
 
 userSchema.statics.searchUsers = function(query: string, limit: number = 10) {

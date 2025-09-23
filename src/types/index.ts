@@ -3,11 +3,13 @@ import { Document } from 'mongoose';
 // User Types
 export interface IUser extends Document {
   _id: string;
-  spotifyId: string;
-  displayName: string;
-  email: string;
-  profilePicture?: string;
-  bio?: string;
+  id: string; // Required field from Flutter app
+  displayName: string; // Required field
+  email: string; // Required field
+  username?: string; // Optional field
+  profilePicture?: string; // Optional field
+  country?: string; // Optional field
+  bio?: string; // Optional field
   followers: string[];
   following: string[];
   preferences: {
@@ -15,10 +17,22 @@ export interface IUser extends Document {
     notifications: boolean;
     privacy: 'public' | 'private';
   };
+  spotifyId?: string; // Optional Spotify ID for connected accounts
   isActive: boolean;
   lastActiveAt: Date;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// User creation/update request from Flutter app
+export interface CreateUserRequest {
+  id: string;
+  displayName: string;
+  email: string;
+  username?: string;
+  profilePicture?: string;
+  country?: string;
+  bio?: string;
 }
 
 // Post Types
@@ -118,6 +132,9 @@ export interface JWTPayload {
 // Request Types
 export interface AuthenticatedRequest extends Request {
   user?: IUser;
+  targetUser?: IUser;
+  params: { [key: string]: string };
+  body: any;
 }
 
 // Socket Types
