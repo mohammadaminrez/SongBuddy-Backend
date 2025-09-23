@@ -42,19 +42,17 @@ export interface CreateUserRequest {
 // Post Types
 export interface IPost extends Document {
   _id: string;
+  id: string;
   userId: string;
-  trackId: string;
-  trackName: string;
+  username: string;
+  userProfilePicture: string;
+  songName: string;
   artistName: string;
-  albumName: string;
-  albumCover: string;
-  previewUrl?: string;
-  externalUrl: string;
-  duration: number;
-  description?: string;
+  songImage: string;
+  description: string;
+  likeCount: number;
   likes: string[];
-  comments: IComment[];
-  shares: number;
+  timeline: string;
   createdAt: Date;
   updatedAt: Date;
 }

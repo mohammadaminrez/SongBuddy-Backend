@@ -330,4 +330,129 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/users/:id/follow - Follow a user
+router.post('/:id/follow', async (req, res) => {
+  try {
+    const { id: targetUserId } = req.params;
+    const { followerId } = req.body;
+
+    if (!followerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Follower ID is required'
+      } as ApiResponse);
+    }
+
+    if (followerId === targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot follow yourself'
+      } as ApiResponse);
+    }
+
+    // Get both users
+    const follower = await User.findOne({ id: followerId });
+    const targetUser = await User.findOne({ id: targetUserId });
+
+    if (!follower || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Check if already following
+    if (follower.following.includes(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Already following this user'
+      } as ApiResponse);
+    }
+
+    // Add to following/followers
+    follower.following.push(targetUserId);
+    targetUser.followers.push(followerId);
+
+    await follower.save();
+    await targetUser.save();
+
+    logger.info(`User ${followerId} followed user ${targetUserId}`);
+
+    return res.json({
+      success: true,
+      message: 'User followed successfully',
+      data: {
+        followerId,
+        targetUserId,
+        followingCount: follower.following.length,
+        followersCount: targetUser.followers.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error following user:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error following user',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// DELETE /api/users/:id/follow - Unfollow a user
+router.delete('/:id/follow', async (req, res) => {
+  try {
+    const { id: targetUserId } = req.params;
+    const { followerId } = req.body;
+
+    if (!followerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Follower ID is required'
+      } as ApiResponse);
+    }
+
+    // Get both users
+    const follower = await User.findOne({ id: followerId });
+    const targetUser = await User.findOne({ id: targetUserId });
+
+    if (!follower || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Remove from following/followers
+    follower.following = follower.following.filter(id => id !== targetUserId);
+    targetUser.followers = targetUser.followers.filter(id => id !== followerId);
+
+    await follower.save();
+    await targetUser.save();
+
+    logger.info(`User ${followerId} unfollowed user ${targetUserId}`);
+
+    return res.json({
+      success: true,
+      message: 'User unfollowed successfully',
+      data: {
+        followerId,
+        targetUserId,
+        followingCount: follower.following.length,
+        followersCount: targetUser.followers.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error unfollowing user:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error unfollowing user',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 export default router;

@@ -1,50 +1,28 @@
 import mongoose, { Schema } from 'mongoose';
-import { IPost, IComment } from '../types';
-
-const commentSchema = new Schema<IComment>({
-  postId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Post',
-    required: true
-  },
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  content: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 500
-  },
-  likes: [{
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  }]
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-commentSchema.virtual('likesCount').get(function() {
-  return this.likes.length;
-});
+import { IPost } from '../types';
 
 const postSchema = new Schema<IPost>({
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
+  id: {
+    type: String,
     required: true,
+    unique: true,
     index: true
   },
-  trackId: {
+  userId: {
     type: String,
     required: true,
     index: true
   },
-  trackName: {
+  username: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  userProfilePicture: {
+    type: String,
+    default: ''
+  },
+  songName: {
     type: String,
     required: true,
     trim: true
@@ -54,40 +32,27 @@ const postSchema = new Schema<IPost>({
     required: true,
     trim: true
   },
-  albumName: {
+  songImage: {
     type: String,
-    required: true,
-    trim: true
-  },
-  albumCover: {
-    type: String,
-    required: true
-  },
-  previewUrl: {
-    type: String,
-    default: ''
-  },
-  externalUrl: {
-    type: String,
-    required: true
-  },
-  duration: {
-    type: Number,
     required: true
   },
   description: {
     type: String,
+    required: true,
     maxlength: 500,
-    default: ''
+    trim: true
   },
-  likes: [{
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  comments: [commentSchema],
-  shares: {
+  likeCount: {
     type: Number,
     default: 0
+  },
+  likes: [{
+    type: String, // User IDs who liked
+    ref: 'User'
+  }],
+  timeline: {
+    type: String,
+    default: 'now'
   }
 }, {
   timestamps: true,
@@ -97,16 +62,14 @@ const postSchema = new Schema<IPost>({
 
 // Indexes for better performance
 postSchema.index({ userId: 1, createdAt: -1 });
-postSchema.index({ trackId: 1 });
+postSchema.index({ id: 1 });
 postSchema.index({ createdAt: -1 });
 postSchema.index({ likes: 1 });
-postSchema.index({ 'comments.createdAt': -1 });
 
 // Text search index
 postSchema.index({ 
-  trackName: 'text', 
+  songName: 'text', 
   artistName: 'text', 
-  albumName: 'text',
   description: 'text'
 });
 
@@ -115,9 +78,6 @@ postSchema.virtual('likesCount').get(function() {
   return this.likes.length;
 });
 
-postSchema.virtual('commentsCount').get(function() {
-  return this.comments.length;
-});
 
 // Instance methods
 postSchema.methods.isLikedBy = function(userId: string): boolean {
@@ -136,27 +96,7 @@ postSchema.methods.unlike = async function(userId: string): Promise<void> {
   await this.save();
 };
 
-postSchema.methods.addComment = async function(userId: string, content: string): Promise<IComment> {
-  const comment = new this.comments({
-    postId: this._id,
-    userId,
-    content
-  });
-  
-  this.comments.push(comment);
-  await this.save();
-  return comment;
-};
 
-postSchema.methods.removeComment = async function(commentId: string): Promise<void> {
-  this.comments = this.comments.filter((comment: any) => comment._id.toString() !== commentId);
-  await this.save();
-};
-
-postSchema.methods.incrementShares = async function(): Promise<void> {
-  this.shares += 1;
-  await this.save();
-};
 
 // Static methods
 postSchema.statics.getFeed = function(userId: string, page: number = 1, limit: number = 20) {
@@ -204,15 +144,12 @@ postSchema.statics.getFeed = function(userId: string, page: number = 1, limit: n
         duration: 1,
         description: 1,
         likes: 1,
-        comments: 1,
-        shares: 1,
         createdAt: 1,
         updatedAt: 1,
         'user._id': 1,
         'user.displayName': 1,
         'user.profilePicture': 1,
-        likesCount: { $size: '$likes' },
-        commentsCount: { $size: '$comments' }
+        likesCount: { $size: '$likes' }
       }
     }
   ]);
@@ -251,11 +188,7 @@ postSchema.statics.getTrendingPosts = function(page: number = 1, limit: number =
     {
       $addFields: {
         engagementScore: {
-          $add: [
-            { $size: '$likes' },
-            { $multiply: [{ $size: '$comments' }, 2] },
-            { $multiply: ['$shares', 3] }
-          ]
+          $size: '$likes'
         }
       }
     },
@@ -282,5 +215,4 @@ postSchema.statics.getTrendingPosts = function(page: number = 1, limit: number =
   ]);
 };
 
-export const Comment = mongoose.model<IComment>('Comment', commentSchema);
 export default mongoose.model<IPost>('Post', postSchema);

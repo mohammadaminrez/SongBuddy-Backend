@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import { databaseService } from './services/database';
 import userRoutes from './routes/userRoutes';
+import postRoutes from './routes/postRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -113,6 +114,7 @@ app.use((req, res, next) => {
 
 // API Routes
 app.use('/api/users', userRoutes);
+app.use('/api/posts', postRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
