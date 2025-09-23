@@ -31,8 +31,7 @@ class DatabaseService {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
-        bufferCommands: false,
-        bufferMaxEntries: 0
+        bufferCommands: false
       });
 
       this.isConnected = true;
@@ -105,20 +104,27 @@ class DatabaseService {
       }
 
       // Ping the database
-      await mongoose.connection.db.admin().ping();
+      if (mongoose.connection.db) {
+        await mongoose.connection.db.admin().ping();
+        
+        const stats = await mongoose.connection.db.stats();
       
-      const stats = await mongoose.connection.db.stats();
-      
-      return {
-        status: 'healthy',
-        message: 'Database connection is healthy',
-        details: {
-          collections: stats.collections,
-          dataSize: stats.dataSize,
-          indexSize: stats.indexSize,
-          storageSize: stats.storageSize
-        }
-      };
+        return {
+          status: 'healthy',
+          message: 'Database connection is healthy',
+          details: {
+            collections: stats.collections,
+            dataSize: stats.dataSize,
+            indexSize: stats.indexSize,
+            storageSize: stats.storageSize
+          }
+        };
+      } else {
+        return {
+          status: 'unhealthy',
+          message: 'Database connection is not available'
+        };
+      }
     } catch (error) {
       return {
         status: 'unhealthy',
@@ -133,8 +139,10 @@ class DatabaseService {
       throw new Error('Cannot drop database in production environment');
     }
 
-    await mongoose.connection.db.dropDatabase();
-    logger.warn('Database dropped successfully');
+    if (mongoose.connection.db) {
+      await mongoose.connection.db.dropDatabase();
+      logger.warn('Database dropped successfully');
+    }
   }
 
   public async clearCollections(): Promise<void> {
@@ -146,7 +154,9 @@ class DatabaseService {
     
     for (const key in collections) {
       const collection = collections[key];
-      await collection.deleteMany({});
+      if (collection) {
+        await collection.deleteMany({});
+      }
     }
     
     logger.warn('All collections cleared');

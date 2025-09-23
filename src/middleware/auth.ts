@@ -10,7 +10,7 @@ export const authenticateToken = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = (req.headers as any).authorization;
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
@@ -64,7 +64,7 @@ export const optionalAuth = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = (req.headers as any).authorization;
     const token = authHeader && authHeader.split(' ')[1];
 
     if (token) {
@@ -123,7 +123,7 @@ export const requireSpotifyAuth = async (
 
 export const validateToken = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = (req.headers as any).authorization;
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {

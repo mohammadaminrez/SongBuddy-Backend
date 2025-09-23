@@ -40,9 +40,7 @@ class JWTService {
       };
 
       return jwt.sign(tokenPayload, this.secret, {
-        expiresIn: this.expiresIn,
-        issuer: 'songbuddy-api',
-        audience: 'songbuddy-app'
+        expiresIn: this.expiresIn
       });
     } catch (error) {
       logger.error('Error generating access token:', error);
@@ -66,9 +64,7 @@ class JWTService {
       };
 
       return jwt.sign(tokenPayload, this.secret, {
-        expiresIn: this.refreshExpiresIn,
-        issuer: 'songbuddy-api',
-        audience: 'songbuddy-app'
+        expiresIn: this.refreshExpiresIn
       });
     } catch (error) {
       logger.error('Error generating refresh token:', error);
