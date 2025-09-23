@@ -23,31 +23,31 @@ router.post('/save', async (req, res) => {
     logger.info('User save request:', userData);
 
     // Create new user and save to MongoDB
-    const newUser = new User({
+      const newUser = new User({
       id: userData.id || 'user-' + Date.now(),
       displayName: userData.displayName || 'User',
       email: userData.email || 'user@example.com',
       username: userData.username || '',
-      profilePicture: userData.profilePicture || '',
+        profilePicture: userData.profilePicture || '',
       country: userData.country || '',
-      bio: userData.bio || '',
+        bio: userData.bio || '',
       currentlyPlaying: userData.currentlyPlaying || null,
       topArtists: userData.topArtists || [],
       topTracks: userData.topTracks || [],
       recentlyPlayed: userData.recentlyPlayed || [],
-      followers: [],
-      following: [],
-      preferences: {
-        theme: 'dark',
-        notifications: true,
-        privacy: 'public'
-      },
-      isActive: true,
-      lastActiveAt: new Date()
-    });
+        followers: [],
+        following: [],
+        preferences: {
+          theme: 'dark',
+          notifications: true,
+          privacy: 'public'
+        },
+        isActive: true,
+        lastActiveAt: new Date()
+      });
 
-    const savedUser = await newUser.save();
-    
+      const savedUser = await newUser.save();
+
     // DEBUG: Log what was actually saved
     console.log('=== SAVED TO MONGODB ===');
     console.log('Saved user ID:', savedUser._id);
@@ -58,15 +58,15 @@ router.post('/save', async (req, res) => {
     logger.info('User saved to MongoDB:', savedUser._id);
 
     res.json({
-      success: true,
+        success: true,
       message: 'User saved successfully!',
-      data: {
-        id: savedUser.id,
-        displayName: savedUser.displayName,
-        email: savedUser.email,
+        data: {
+          id: savedUser.id,
+          displayName: savedUser.displayName,
+          email: savedUser.email,
         country: savedUser.country,
-        username: savedUser.username,
-        bio: savedUser.bio,
+          username: savedUser.username,
+          bio: savedUser.bio,
         currentlyPlaying: savedUser.currentlyPlaying,
         topArtists: savedUser.topArtists,
         topTracks: savedUser.topTracks,
@@ -78,7 +78,7 @@ router.post('/save', async (req, res) => {
   } catch (error: any) {
     logger.error('Error saving user:', error);
     res.status(500).json({
-      success: false,
+        success: false,
       message: 'Error saving user',
       error: error.message
     });
@@ -143,6 +143,10 @@ router.get('/:id', async (req, res) => {
         profilePicture: user.profilePicture,
         country: user.country,
         bio: user.bio,
+        currentlyPlaying: user.currentlyPlaying,
+        topArtists: user.topArtists,
+        topTracks: user.topTracks,
+        recentlyPlayed: user.recentlyPlayed,
         followersCount: user.followers.length,
         followingCount: user.following.length,
         isActive: user.isActive,
@@ -159,6 +163,116 @@ router.get('/:id', async (req, res) => {
       success: false,
       message: 'Internal server error',
       error: 'INTERNAL_ERROR'
+    } as ApiResponse);
+  }
+});
+
+// PUT /api/users/:id - Update user
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    // Remove ID from update data (ID cannot be changed)
+    delete updateData.id;
+    
+    logger.info('User update request:', { id, updateData });
+
+    const updatedUser = await User.findOneAndUpdate(
+      { id },
+      {
+        displayName: updateData.displayName,
+        email: updateData.email,
+        username: updateData.username,
+        profilePicture: updateData.profilePicture,
+        country: updateData.country,
+        bio: updateData.bio,
+        currentlyPlaying: updateData.currentlyPlaying,
+        topArtists: updateData.topArtists,
+        topTracks: updateData.topTracks,
+        recentlyPlayed: updateData.recentlyPlayed,
+        lastActiveAt: new Date()
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    logger.info('User updated successfully:', updatedUser._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'User updated successfully',
+      data: {
+        id: updatedUser.id,
+        displayName: updatedUser.displayName,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        profilePicture: updatedUser.profilePicture,
+        country: updatedUser.country,
+        bio: updatedUser.bio,
+        currentlyPlaying: updatedUser.currentlyPlaying,
+        topArtists: updatedUser.topArtists,
+        topTracks: updatedUser.topTracks,
+        recentlyPlayed: updatedUser.recentlyPlayed,
+        lastActiveAt: updatedUser.lastActiveAt,
+        updatedAt: updatedUser.updatedAt
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error updating user:', error);
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating user',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// DELETE /api/users/:id - Delete user (logout)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    logger.info('User delete request:', { id });
+
+    const deletedUser = await User.findOneAndDelete({ id });
+
+    if (!deletedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    logger.info('User deleted successfully:', deletedUser._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'User deleted successfully',
+      data: {
+        id: deletedUser.id,
+        displayName: deletedUser.displayName,
+        deletedAt: new Date().toISOString()
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error deleting user:', error);
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Error deleting user',
+      error: error.message
     } as ApiResponse);
   }
 });
