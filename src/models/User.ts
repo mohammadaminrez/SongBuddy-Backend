@@ -106,19 +106,22 @@ userSchema.index({ createdAt: -1 });
 
 // Virtual fields
 userSchema.virtual('followersCount').get(function() {
-  return this.followers.length;
+  return this.followers ? this.followers.length : 0;
 });
 
 userSchema.virtual('followingCount').get(function() {
-  return this.following.length;
+  return this.following ? this.following.length : 0;
 });
 
 // Instance methods
 userSchema.methods.isFollowing = function(userId: string): boolean {
-  return this.following.some((id: any) => id.toString() === userId);
+  return this.following ? this.following.some((id: any) => id.toString() === userId) : false;
 };
 
 userSchema.methods.follow = async function(userId: string): Promise<void> {
+  if (!this.following) {
+    this.following = [];
+  }
   if (!this.isFollowing(userId)) {
     this.following.push(userId);
     await this.save();
@@ -126,11 +129,16 @@ userSchema.methods.follow = async function(userId: string): Promise<void> {
 };
 
 userSchema.methods.unfollow = async function(userId: string): Promise<void> {
-  this.following = this.following.filter((id: any) => id.toString() !== userId);
-  await this.save();
+  if (this.following) {
+    this.following = this.following.filter((id: any) => id.toString() !== userId);
+    await this.save();
+  }
 };
 
 userSchema.methods.addFollower = async function(userId: string): Promise<void> {
+  if (!this.followers) {
+    this.followers = [];
+  }
   if (!this.followers.some((id: any) => id.toString() === userId)) {
     this.followers.push(userId);
     await this.save();
@@ -138,8 +146,10 @@ userSchema.methods.addFollower = async function(userId: string): Promise<void> {
 };
 
 userSchema.methods.removeFollower = async function(userId: string): Promise<void> {
-  this.followers = this.followers.filter((id: any) => id.toString() !== userId);
-  await this.save();
+  if (this.followers) {
+    this.followers = this.followers.filter((id: any) => id.toString() !== userId);
+    await this.save();
+  }
 };
 
 userSchema.methods.updateLastActive = async function(): Promise<void> {

@@ -117,16 +117,35 @@ router.get('/feed/:userId', async (req, res) => {
       } as ApiResponse);
     }
 
-    // Get posts from followed users + user's own posts
-    const followingIds = user.following || [];
-    const targetUserIds = [...followingIds, userId];
+    // Get posts from followed users only (exclude user's own posts)
+    const followingObjectIds = user.following || [];
+    
+    // If user is not following anyone, return empty feed
+    if (followingObjectIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Feed retrieved successfully',
+        data: [],
+        pagination: {
+          page,
+          limit,
+          total: 0
+        }
+      } as ApiResponse<any[]>);
+    }
 
-    const posts = await Post.find({ userId: { $in: targetUserIds } })
+    // Get the actual user IDs from the ObjectIds
+    const followedUsers = await User.find({ _id: { $in: followingObjectIds } }).select('id');
+    const followingIds = followedUsers.map(user => user.id);
+
+    const posts = await Post.find({ userId: { $in: followingIds } })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     logger.info(`Feed for user ${userId}: ${posts.length} posts`);
+    logger.info(`Following users: ${followingIds.join(', ')}`);
+    logger.info(`Posts found for following users: ${posts.map(p => `${p.username} - ${p.songName}`).join(', ')}`);
 
     // Get likes with usernames for all posts
     const postsWithLikes = await Promise.all(posts.map(async (post) => {

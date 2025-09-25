@@ -177,6 +177,15 @@ router.get('/:id/profile', async (req, res) => {
       };
     }));
 
+    // Check if current user is following this user
+    let isFollowing = false;
+    if (currentUserId && currentUserId !== user.id) {
+      const currentUser = await User.findOne({ id: currentUserId });
+      if (currentUser) {
+        isFollowing = currentUser.following.includes(user._id);
+      }
+    }
+
     return res.json({
       success: true,
       message: 'User profile retrieved successfully',
@@ -190,7 +199,8 @@ router.get('/:id/profile', async (req, res) => {
           bio: user.bio,
           followersCount: user.followers.length,
           followingCount: user.following.length,
-          postsCount: user.posts.length
+          postsCount: user.posts.length,
+          isFollowing: isFollowing
         },
         posts: postsWithLikes,
         pagination: {
@@ -472,7 +482,7 @@ router.post('/:id/follow', async (req, res) => {
     }
 
     // Check if already following
-    if (follower.following.includes(targetUserId)) {
+    if (follower.following.includes(targetUser._id)) {
       return res.status(400).json({
         success: false,
         message: 'Already following this user'
@@ -480,8 +490,8 @@ router.post('/:id/follow', async (req, res) => {
     }
 
     // Add to following/followers
-    follower.following.push(targetUserId);
-    targetUser.followers.push(followerId);
+    follower.following.push(targetUser._id);
+    targetUser.followers.push(follower._id);
 
     await follower.save();
     await targetUser.save();
@@ -535,8 +545,8 @@ router.delete('/:id/follow', async (req, res) => {
     }
 
     // Remove from following/followers
-    follower.following = follower.following.filter(id => id !== targetUserId);
-    targetUser.followers = targetUser.followers.filter(id => id !== followerId);
+    follower.following = follower.following.filter(id => id.toString() !== targetUser._id.toString());
+    targetUser.followers = targetUser.followers.filter(id => id.toString() !== follower._id.toString());
 
     await follower.save();
     await targetUser.save();
@@ -564,4 +574,156 @@ router.delete('/:id/follow', async (req, res) => {
   }
 });
 
+// GET /api/users/:id/follow-status - Check if current user is following target user
+router.get('/:id/follow-status', async (req, res) => {
+  try {
+    const { id: targetUserId } = req.params;
+    const { currentUserId } = req.query;
+
+    if (!currentUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current user ID is required'
+      } as ApiResponse);
+    }
+
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot check follow status with yourself'
+      } as ApiResponse);
+    }
+
+    // Get both users
+    const currentUser = await User.findOne({ id: currentUserId });
+    const targetUser = await User.findOne({ id: targetUserId });
+
+    if (!currentUser || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Check if current user is following target user
+    const isFollowing = currentUser.following.includes(targetUser._id);
+
+    return res.json({
+      success: true,
+      message: 'Follow status retrieved successfully',
+      data: {
+        targetUserId,
+        currentUserId,
+        isFollowing,
+        followersCount: targetUser.followers.length,
+        followingCount: targetUser.following.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error checking follow status:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error checking follow status',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// GET /api/users/:id/followers - Get user's followers
+router.get('/:id/followers', async (req, res) => {
+  try {
+    const { id: userId } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const user = await User.findOne({ id: userId })
+      .populate({
+        path: 'followers',
+        select: 'id displayName username profilePicture',
+        options: {
+          skip: skip,
+          limit: limit
+        }
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Followers retrieved successfully',
+      data: user.followers,
+      pagination: {
+        page,
+        limit,
+        total: user.followers.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error getting followers:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting followers',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// GET /api/users/:id/following - Get user's following
+router.get('/:id/following', async (req, res) => {
+  try {
+    const { id: userId } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const user = await User.findOne({ id: userId })
+      .populate({
+        path: 'following',
+        select: 'id displayName username profilePicture',
+        options: {
+          skip: skip,
+          limit: limit
+        }
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Following retrieved successfully',
+      data: user.following,
+      pagination: {
+        page,
+        limit,
+        total: user.following.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error getting following:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting following',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 export default router;
+
