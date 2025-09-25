@@ -41,7 +41,7 @@ class JWTService {
 
       return jwt.sign(tokenPayload, this.secret, {
         expiresIn: this.expiresIn
-      });
+      } as jwt.SignOptions);
     } catch (error) {
       logger.error('Error generating access token:', error);
       throw new Error('Failed to generate access token');
@@ -65,7 +65,7 @@ class JWTService {
 
       return jwt.sign(tokenPayload, this.secret, {
         expiresIn: this.refreshExpiresIn
-      });
+      } as jwt.SignOptions);
     } catch (error) {
       logger.error('Error generating refresh token:', error);
       throw new Error('Failed to generate refresh token');
