@@ -15,11 +15,11 @@ router.get('/search', async (req, res) => {
     console.log('🔍 Query params:', { q: query, page, limit });
     
     // Validate query parameter
-    if (!query || query.toString().trim().length < 2) {
-      console.log('🔍 Query too short, returning 400');
+    if (!query || query.toString().trim().length < 1) {
+      console.log('🔍 Query empty, returning 400');
       return res.status(400).json({
         success: false,
-        message: 'Search query must be at least 2 characters long',
+        message: 'Search query cannot be empty',
         data: []
       } as ApiResponse);
     }
