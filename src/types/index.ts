@@ -12,6 +12,7 @@ export interface IUser extends Document {
   bio?: string; // Optional field
   followers: string[];
   following: string[];
+  posts: string[];
   preferences: {
     theme: 'light' | 'dark';
     notifications: boolean;
@@ -42,14 +43,13 @@ export interface CreateUserRequest {
 // Post Types
 export interface IPost extends Document {
   _id: string;
-  id: string;
   userId: string;
   username: string;
   userProfilePicture: string;
   songName: string;
   artistName: string;
   songImage: string;
-  description: string;
+  description?: string;
   likeCount: number;
   likes: string[];
   timeline: string;

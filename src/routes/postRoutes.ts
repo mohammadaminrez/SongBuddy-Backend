@@ -6,6 +6,26 @@ import { ApiResponse } from '../types';
 
 const router = express.Router();
 
+// Helper function to get likes with usernames
+async function getLikesWithNames(likes: string[]) {
+  if (!likes || likes.length === 0) return [];
+  
+  const likedUsers = await User.find({ id: { $in: likes } }).select('id displayName username');
+  return likes.map(userId => {
+    const user = likedUsers.find(u => u.id === userId);
+    return {
+      userId: userId,
+      username: user?.displayName || user?.username || 'Unknown User'
+    };
+  });
+}
+
+// Helper function to check if current user liked a post
+function isLikedByCurrentUser(likes: string[], currentUserId?: string): boolean {
+  if (!currentUserId || !likes || likes.length === 0) return false;
+  return likes.includes(currentUserId);
+}
+
 // POST /api/posts/create - Create new post
 router.post('/create', async (req, res) => {
   try {
@@ -13,31 +33,47 @@ router.post('/create', async (req, res) => {
     
     logger.info('Post creation request:', postData);
 
+    // Validate required fields
+    const requiredFields = ['userId', 'username', 'songName', 'artistName', 'songImage'];
+    const missingFields = requiredFields.filter(field => !postData[field]);
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      } as ApiResponse);
+    }
+
+    // Generate unique post ID
+    const postId = postData.id || 'post-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
     // Create new post
     const newPost = new Post({
-      id: postData.id || 'post-' + Date.now(),
       userId: postData.userId,
       username: postData.username,
       userProfilePicture: postData.userProfilePicture || '',
       songName: postData.songName,
       artistName: postData.artistName,
       songImage: postData.songImage,
-      description: postData.description,
-      timeline: postData.timeline || 'now',
-      likeCount: 0,
-      likes: [],
-      comments: [],
-      shares: 0
+      description: postData.description || '',
+      likeCount: postData.likeCount || 0,
+      likes: []
     });
 
     const savedPost = await newPost.save();
     logger.info('Post created successfully:', savedPost._id);
 
-    res.status(201).json({
+    // Add post to user's posts array
+    await User.findOneAndUpdate(
+      { id: postData.userId },
+      { $push: { posts: savedPost._id } }
+    );
+
+    return res.status(201).json({
       success: true,
       message: 'Post created successfully',
       data: {
-        id: savedPost.id,
+        id: postId,
         userId: savedPost.userId,
         username: savedPost.username,
         userProfilePicture: savedPost.userProfilePicture,
@@ -46,14 +82,15 @@ router.post('/create', async (req, res) => {
         songImage: savedPost.songImage,
         description: savedPost.description,
         likeCount: savedPost.likeCount,
-        timeline: savedPost.timeline,
-        createdAt: savedPost.createdAt
+        createdAt: savedPost.createdAt,
+        timeline: savedPost.timeline, // This will use the virtual field
+        isLikedByCurrentUser: false
       }
     } as ApiResponse<any>);
 
   } catch (error: any) {
     logger.error('Error creating post:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error creating post',
       error: error.message
@@ -65,6 +102,7 @@ router.post('/create', async (req, res) => {
 router.get('/feed/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const currentUserId = req.query.currentUserId as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -90,11 +128,11 @@ router.get('/feed/:userId', async (req, res) => {
 
     logger.info(`Feed for user ${userId}: ${posts.length} posts`);
 
-    return res.json({
-      success: true,
-      message: 'Feed retrieved successfully',
-      data: posts.map(post => ({
-        id: post.id,
+    // Get likes with usernames for all posts
+    const postsWithLikes = await Promise.all(posts.map(async (post) => {
+      const likesWithNames = await getLikesWithNames(post.likes);
+      return {
+        id: post._id,
         userId: post.userId,
         username: post.username,
         userProfilePicture: post.userProfilePicture,
@@ -104,8 +142,16 @@ router.get('/feed/:userId', async (req, res) => {
         description: post.description,
         likeCount: post.likeCount,
         timeline: post.timeline,
-        createdAt: post.createdAt
-      })),
+        likes: likesWithNames,
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: isLikedByCurrentUser(post.likes, currentUserId)
+      };
+    }));
+
+    return res.json({
+      success: true,
+      message: 'Feed retrieved successfully',
+      data: postsWithLikes,
       pagination: {
         page,
         limit,
@@ -126,6 +172,7 @@ router.get('/feed/:userId', async (req, res) => {
 // GET /api/posts/search - Get random recent posts for search feed
 router.get('/search', async (req, res) => {
   try {
+    const currentUserId = req.query.currentUserId as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -140,11 +187,11 @@ router.get('/search', async (req, res) => {
 
     logger.info(`Search feed: ${posts.length} posts`);
 
-    return res.json({
-      success: true,
-      message: 'Search feed retrieved successfully',
-      data: posts.map(post => ({
-        id: post.id,
+    // Get likes with usernames for all posts
+    const postsWithLikes = await Promise.all(posts.map(async (post) => {
+      const likesWithNames = await getLikesWithNames(post.likes);
+      return {
+        id: post._id,
         userId: post.userId,
         username: post.username,
         userProfilePicture: post.userProfilePicture,
@@ -153,9 +200,17 @@ router.get('/search', async (req, res) => {
         songImage: post.songImage,
         description: post.description,
         likeCount: post.likeCount,
+        likes: likesWithNames,
         timeline: post.timeline,
-        createdAt: post.createdAt
-      })),
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: isLikedByCurrentUser(post.likes, currentUserId)
+      };
+    }));
+
+    return res.json({
+      success: true,
+      message: 'Search feed retrieved successfully',
+      data: postsWithLikes,
       pagination: {
         page,
         limit,
@@ -186,7 +241,7 @@ router.post('/:postId/like', async (req, res) => {
       } as ApiResponse);
     }
 
-    const post = await Post.findOne({ id: postId });
+    const post = await Post.findOne({ _id: postId });
     if (!post) {
       return res.status(404).json({
         success: false,
@@ -210,12 +265,16 @@ router.post('/:postId/like', async (req, res) => {
 
     logger.info(`Post ${postId} liked by user ${userId}`);
 
+    // Get usernames for all likes
+    const likesWithNames = await getLikesWithNames(post.likes);
+
     return res.json({
       success: true,
       message: 'Post liked successfully',
       data: {
-        postId: post.id,
+        postId: post._id,
         likeCount: post.likeCount,
+        likes: likesWithNames,
         liked: true
       }
     } as ApiResponse<any>);
@@ -243,7 +302,7 @@ router.delete('/:postId/like', async (req, res) => {
       } as ApiResponse);
     }
 
-    const post = await Post.findOne({ id: postId });
+    const post = await Post.findOne({ _id: postId });
     if (!post) {
       return res.status(404).json({
         success: false,
@@ -259,12 +318,16 @@ router.delete('/:postId/like', async (req, res) => {
 
     logger.info(`Post ${postId} unliked by user ${userId}`);
 
+    // Get usernames for remaining likes
+    const likesWithNames = await getLikesWithNames(post.likes);
+
     return res.json({
       success: true,
       message: 'Post unliked successfully',
       data: {
-        postId: post.id,
+        postId: post._id,
         likeCount: post.likeCount,
+        likes: likesWithNames,
         liked: false
       }
     } as ApiResponse<any>);
@@ -283,8 +346,9 @@ router.delete('/:postId/like', async (req, res) => {
 router.get('/:postId', async (req, res) => {
   try {
     const { postId } = req.params;
+    const currentUserId = req.query.currentUserId as string;
 
-    const post = await Post.findOne({ id: postId });
+    const post = await Post.findOne({ _id: postId });
     if (!post) {
       return res.status(404).json({
         success: false,
@@ -293,11 +357,14 @@ router.get('/:postId', async (req, res) => {
       } as ApiResponse);
     }
 
+    // Get likes with usernames
+    const likesWithNames = await getLikesWithNames(post.likes);
+
     return res.json({
       success: true,
       message: 'Post retrieved successfully',
       data: {
-        id: post.id,
+        id: post._id,
         userId: post.userId,
         username: post.username,
         userProfilePicture: post.userProfilePicture,
@@ -306,8 +373,10 @@ router.get('/:postId', async (req, res) => {
         songImage: post.songImage,
         description: post.description,
         likeCount: post.likeCount,
+        likes: likesWithNames,
         timeline: post.timeline,
-        createdAt: post.createdAt
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: isLikedByCurrentUser(post.likes, currentUserId)
       }
     } as ApiResponse<any>);
 
@@ -316,6 +385,76 @@ router.get('/:postId', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error getting post',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// PUT /api/posts/:postId - Edit post
+router.put('/:postId', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { userId, description } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      } as ApiResponse);
+    }
+
+    if (!description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Description is required'
+      } as ApiResponse);
+    }
+
+    // Find the post and verify ownership
+    const post = await Post.findOne({ _id: postId, userId });
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found or not owned by user',
+        error: 'POST_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Update the description
+    post.description = description;
+    await post.save();
+
+    logger.info(`Post ${postId} updated by user ${userId}`);
+
+    // Get likes with usernames
+    const likesWithNames = await getLikesWithNames(post.likes);
+
+    return res.json({
+      success: true,
+      message: 'Post updated successfully',
+      data: {
+        id: post._id,
+        userId: post.userId,
+        username: post.username,
+        userProfilePicture: post.userProfilePicture,
+        songName: post.songName,
+        artistName: post.artistName,
+        songImage: post.songImage,
+        description: post.description,
+        likeCount: post.likeCount,
+        likes: likesWithNames,
+        timeline: post.timeline,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        isLikedByCurrentUser: false
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error updating post:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating post',
       error: error.message
     } as ApiResponse);
   }
@@ -334,7 +473,7 @@ router.delete('/:postId', async (req, res) => {
       } as ApiResponse);
     }
 
-    const post = await Post.findOne({ id: postId, userId });
+    const post = await Post.findOne({ _id: postId, userId });
     if (!post) {
       return res.status(404).json({
         success: false,
@@ -343,14 +482,21 @@ router.delete('/:postId', async (req, res) => {
       } as ApiResponse);
     }
 
-    await Post.findOneAndDelete({ id: postId });
+    await Post.findOneAndDelete({ _id: postId });
+    
+    // Remove post from user's posts array
+    await User.findOneAndUpdate(
+      { id: userId },
+      { $pull: { posts: postId } }
+    );
+    
     logger.info(`Post ${postId} deleted by user ${userId}`);
 
     return res.json({
       success: true,
       message: 'Post deleted successfully',
       data: {
-        postId: post.id,
+        postId: post._id,
         deletedAt: new Date().toISOString()
       }
     } as ApiResponse<any>);
@@ -360,6 +506,67 @@ router.delete('/:postId', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error deleting post',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// GET /api/posts/user/:userId - Get posts by specific user
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.query.currentUserId as string;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const skip = offset || (page - 1) * limit;
+
+    logger.info(`Getting posts for user: ${userId}, page: ${page}, limit: ${limit}`);
+
+    // Find posts by user ID
+    const posts = await Post.find({ userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    logger.info(`Found ${posts.length} posts for user ${userId}`);
+
+    // Get likes with usernames for all posts
+    const postsWithLikes = await Promise.all(posts.map(async (post) => {
+      const likesWithNames = await getLikesWithNames(post.likes);
+      return {
+        id: post._id,
+        userId: post.userId,
+        username: post.username,
+        userProfilePicture: post.userProfilePicture,
+        songName: post.songName,
+        artistName: post.artistName,
+        songImage: post.songImage,
+        description: post.description,
+        likeCount: post.likeCount,
+        timeline: post.timeline,
+        likes: likesWithNames,
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: isLikedByCurrentUser(post.likes, currentUserId)
+      };
+    }));
+
+    return res.json({
+      success: true,
+      message: 'User posts retrieved successfully',
+      data: postsWithLikes,
+      pagination: {
+        page,
+        limit,
+        total: posts.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error getting user posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting user posts',
       error: error.message
     } as ApiResponse);
   }
