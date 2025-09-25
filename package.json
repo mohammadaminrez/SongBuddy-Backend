@@ -16,7 +16,10 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "seed": "ts-node src/scripts/seedData.ts",
+    "update-user": "ts-node src/scripts/updateExistingUser.ts",
+    "add-following-posts": "ts-node src/scripts/addPostsForFollowing.ts"
   },
   "repository": {
     "type": "git",
