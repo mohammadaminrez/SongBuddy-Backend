@@ -188,8 +188,97 @@ router.get('/feed/:userId', async (req, res) => {
   }
 });
 
-// GET /api/posts/search - Get random recent posts for search feed
+// GET /api/posts/search - Search posts by song name, artist, or description
 router.get('/search', async (req, res) => {
+  try {
+    const { q: query, page = 1, limit = 20, currentUserId } = req.query;
+    
+    if (!query || query.toString().trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query must be at least 2 characters long'
+      } as ApiResponse);
+    }
+
+    const searchQuery = query.toString().trim();
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    logger.info(`Searching posts with query: "${searchQuery}"`);
+
+    // Search posts by song name, artist name, or description
+    const posts = await Post.find({
+      $or: [
+        { songName: { $regex: searchQuery, $options: 'i' } },
+        { artistName: { $regex: searchQuery, $options: 'i' } },
+        { description: { $regex: searchQuery, $options: 'i' } },
+        { username: { $regex: searchQuery, $options: 'i' } }
+      ]
+    })
+    .sort({ 
+      // Prioritize exact matches, then by like count, then by creation date
+      likeCount: -1,
+      createdAt: -1 
+    })
+    .skip(skip)
+    .limit(limitNum);
+
+    const total = await Post.countDocuments({
+      $or: [
+        { songName: { $regex: searchQuery, $options: 'i' } },
+        { artistName: { $regex: searchQuery, $options: 'i' } },
+        { description: { $regex: searchQuery, $options: 'i' } },
+        { username: { $regex: searchQuery, $options: 'i' } }
+      ]
+    });
+
+    // Get likes with usernames for all posts
+    const postsWithLikes = await Promise.all(posts.map(async (post) => {
+      const likesWithNames = await getLikesWithNames(post.likes);
+      return {
+        id: post._id,
+        userId: post.userId,
+        username: post.username,
+        userProfilePicture: post.userProfilePicture,
+        songName: post.songName,
+        artistName: post.artistName,
+        songImage: post.songImage,
+        description: post.description,
+        likeCount: post.likeCount,
+        likes: likesWithNames,
+        timeline: post.timeline,
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: isLikedByCurrentUser(post.likes, currentUserId as string)
+      };
+    }));
+
+    logger.info(`Found ${postsWithLikes.length} posts for query: "${searchQuery}"`);
+
+    return res.json({
+      success: true,
+      message: 'Posts found successfully',
+      data: postsWithLikes,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    } as ApiResponse<any[]>);
+
+  } catch (error: any) {
+    logger.error('Error searching posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error searching posts',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// GET /api/posts/discovery - Get random recent posts for discovery feed
+router.get('/discovery', async (req, res) => {
   try {
     const currentUserId = req.query.currentUserId as string;
     const page = parseInt(req.query.page as string) || 1;
@@ -204,7 +293,7 @@ router.get('/search', async (req, res) => {
       { $sample: { size: limit } }
     ]);
 
-    logger.info(`Search feed: ${posts.length} posts`);
+    logger.info(`Discovery feed: ${posts.length} posts`);
 
     // Get likes with usernames for all posts
     const postsWithLikes = await Promise.all(posts.map(async (post) => {
@@ -228,7 +317,7 @@ router.get('/search', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Search feed retrieved successfully',
+      message: 'Discovery feed retrieved successfully',
       data: postsWithLikes,
       pagination: {
         page,
@@ -238,10 +327,10 @@ router.get('/search', async (req, res) => {
     } as ApiResponse<any[]>);
 
   } catch (error: any) {
-    logger.error('Error getting search feed:', error);
+    logger.error('Error getting discovery feed:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error getting search feed',
+      message: 'Error getting discovery feed',
       error: error.message
     } as ApiResponse);
   }

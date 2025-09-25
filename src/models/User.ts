@@ -104,6 +104,19 @@ userSchema.index({ username: 1 }, { sparse: true });
 userSchema.index({ displayName: 'text' });
 userSchema.index({ createdAt: -1 });
 
+// Search-specific indexes for improved regex performance
+userSchema.index({ displayName: 1 });
+userSchema.index({ username: 1 });
+userSchema.index({ isActive: 1, displayName: 1 });
+userSchema.index({ isActive: 1, username: 1 });
+
+// Compound index for search queries
+userSchema.index({ 
+  isActive: 1, 
+  displayName: 'text', 
+  username: 'text' 
+});
+
 // Virtual fields
 userSchema.virtual('followersCount').get(function() {
   return this.followers ? this.followers.length : 0;

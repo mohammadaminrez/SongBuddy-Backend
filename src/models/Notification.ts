@@ -3,8 +3,7 @@ import { INotification } from '../types';
 
 const notificationSchema = new Schema<INotification>({
   userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: true,
     index: true
   },
@@ -15,8 +14,7 @@ const notificationSchema = new Schema<INotification>({
     index: true
   },
   fromUserId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: true
   },
   postId: {

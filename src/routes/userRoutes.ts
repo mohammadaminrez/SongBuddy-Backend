@@ -6,6 +6,126 @@ import { CreateUserRequest, ApiResponse, IUser } from '../types';
 
 const router = express.Router();
 
+// GET /api/users/search - Search users by name, username, or email with improved regex
+router.get('/search', async (req, res) => {
+  try {
+    console.log('🔍 SEARCH ENDPOINT CALLED');
+    const { q: query, page = 1, limit = 20 } = req.query;
+    
+    console.log('🔍 Query params:', { q: query, page, limit });
+    
+    // Validate query parameter
+    if (!query || query.toString().trim().length < 1) {
+      console.log('🔍 Query empty, returning 400');
+      return res.status(400).json({
+        success: false,
+        message: 'Search query cannot be empty',
+        data: []
+      } as ApiResponse);
+    }
+
+    const searchQuery = query.toString().trim();
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    console.log(`🔍 Searching users with query: "${searchQuery}"`);
+
+    // Debug: First check if any users exist at all
+    const totalUsers = await User.countDocuments({});
+    console.log(`🔍 Total users in database: ${totalUsers}`);
+    
+    const activeUsers = await User.countDocuments({ isActive: true });
+    console.log(`🔍 Active users in database: ${activeUsers}`);
+
+    // Escape special regex characters for security
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Create regex patterns for better matching
+    const startsWithPattern = new RegExp(`^${escapedQuery}`, 'i');
+    const containsPattern = new RegExp(escapedQuery, 'i');
+
+    // Simple search with regex filtering
+    const users = await User.find({
+      $and: [
+        { isActive: true },
+        {
+          $or: [
+            { displayName: { $regex: containsPattern } },
+            { username: { $regex: containsPattern } },
+            { email: { $regex: containsPattern } }
+          ]
+        }
+      ]
+    })
+    .select('id displayName email username profilePicture country bio followers following lastActiveAt createdAt')
+    .sort({ displayName: 1 })
+    .skip(skip)
+    .limit(limitNum);
+
+    // Get total count for pagination
+    const totalCount = await User.countDocuments({
+      $and: [
+        { isActive: true },
+        {
+          $or: [
+            { displayName: { $regex: containsPattern } },
+            { username: { $regex: containsPattern } },
+            { email: { $regex: containsPattern } }
+          ]
+        }
+      ]
+    });
+
+    // Transform users to include counts
+    const transformedUsers = users.map(user => ({
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      username: user.username,
+      profilePicture: user.profilePicture,
+      country: user.country,
+      bio: user.bio,
+      followersCount: user.followers ? user.followers.length : 0,
+      followingCount: user.following ? user.following.length : 0,
+      lastActiveAt: user.lastActiveAt,
+      createdAt: user.createdAt
+    }));
+
+    console.log(`🔍 Found ${transformedUsers.length} users for query: "${searchQuery}" (total matching: ${totalCount})`);
+
+    // Return 404 if no users found (better UX than empty array)
+    if (transformedUsers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No users found matching your search',
+        error: 'NO_RESULTS',
+        data: []
+      } as ApiResponse);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Users found successfully',
+      data: transformedUsers,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum)
+      }
+    } as ApiResponse<any[]>);
+
+  } catch (error: any) {
+    console.error('Error searching users:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error searching users',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 // POST /api/users/save - Save user data from Flutter app
 router.post('/save', async (req, res) => {
   try {
@@ -724,6 +844,7 @@ router.get('/:id/following', async (req, res) => {
     } as ApiResponse);
   }
 });
+
 
 export default router;
 

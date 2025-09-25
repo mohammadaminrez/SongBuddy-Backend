@@ -59,6 +59,7 @@
     "mongoose": "^8.18.1",
     "morgan": "^1.10.1",
     "redis": "^5.8.2",
+    "rimraf": "^6.0.1",
     "socket.io": "^4.8.1",
     "spotify-web-api-node": "^5.0.2"
   },
