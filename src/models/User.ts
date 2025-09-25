@@ -50,6 +50,10 @@ const userSchema = new Schema<IUser>({
     type: Schema.Types.ObjectId,
     ref: 'User'
   }],
+  posts: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Post'
+  }],
   preferences: {
     theme: {
       type: String,

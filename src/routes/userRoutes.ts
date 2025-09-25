@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/User';
+import Post from '../models/Post';
 import { logger } from '../utils/logger';
 import { CreateUserRequest, ApiResponse, IUser } from '../types';
 
@@ -114,6 +115,99 @@ router.get('/', async (req, res) => {
       message: 'Error getting users',
       error: error.message
     });
+  }
+});
+
+// GET /api/users/:id/profile - Get user profile with posts (efficient)
+router.get('/:id/profile', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.query.currentUserId as string;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    logger.info(`Getting profile for user: ${id}`);
+
+    // Get user with populated posts
+    const user = await User.findOne({ id })
+      .populate({
+        path: 'posts',
+        options: {
+          sort: { createdAt: -1 },
+          skip: skip,
+          limit: limit
+        }
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Get likes with usernames for posts
+    const postsWithLikes = await Promise.all(user.posts.map(async (post: any) => {
+      // Get usernames for likes
+      const likedUsers = await User.find({ id: { $in: post.likes } }).select('id displayName username');
+      const likesWithNames = post.likes.map((userId: string) => {
+        const user = likedUsers.find((u: any) => u.id === userId);
+        return {
+          userId: userId,
+          username: user?.displayName || user?.username || 'Unknown User'
+        };
+      });
+      
+      return {
+        id: post._id,
+        userId: post.userId,
+        username: post.username,
+        userProfilePicture: post.userProfilePicture,
+        songName: post.songName,
+        artistName: post.artistName,
+        songImage: post.songImage,
+        description: post.description,
+        likeCount: post.likeCount,
+        timeline: post.timeline,
+        likes: likesWithNames,
+        createdAt: post.createdAt,
+        isLikedByCurrentUser: post.likes.includes(currentUserId)
+      };
+    }));
+
+    return res.json({
+      success: true,
+      message: 'User profile retrieved successfully',
+      data: {
+        user: {
+          id: user.id,
+          displayName: user.displayName,
+          username: user.username,
+          profilePicture: user.profilePicture,
+          country: user.country,
+          bio: user.bio,
+          followersCount: user.followers.length,
+          followingCount: user.following.length,
+          postsCount: user.posts.length
+        },
+        posts: postsWithLikes,
+        pagination: {
+          page,
+          limit,
+          total: user.posts.length
+        }
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error getting user profile:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error getting user profile',
+      error: error.message
+    } as ApiResponse);
   }
 });
 
@@ -254,7 +348,22 @@ router.delete('/:id', async (req, res) => {
       } as ApiResponse);
     }
 
-    logger.info('User deleted successfully:', deletedUser._id);
+    // CASCADE DELETE: Delete all user's posts
+    await Post.deleteMany({ userId: id });
+    
+    // Remove user from all followers' following lists
+    await User.updateMany(
+      { following: deletedUser._id },
+      { $pull: { following: deletedUser._id } }
+    );
+    
+    // Remove user from all following users' followers lists
+    await User.updateMany(
+      { followers: deletedUser._id },
+      { $pull: { followers: deletedUser._id } }
+    );
+
+    logger.info('User and all related data deleted successfully:', deletedUser._id);
 
     return res.status(200).json({
       success: true,
@@ -326,6 +435,131 @@ router.get('/', async (req, res) => {
       success: false,
       message: 'Internal server error',
       error: 'INTERNAL_ERROR'
+    } as ApiResponse);
+  }
+});
+
+// POST /api/users/:id/follow - Follow a user
+router.post('/:id/follow', async (req, res) => {
+  try {
+    const { id: targetUserId } = req.params;
+    const { followerId } = req.body;
+
+    if (!followerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Follower ID is required'
+      } as ApiResponse);
+    }
+
+    if (followerId === targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot follow yourself'
+      } as ApiResponse);
+    }
+
+    // Get both users
+    const follower = await User.findOne({ id: followerId });
+    const targetUser = await User.findOne({ id: targetUserId });
+
+    if (!follower || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Check if already following
+    if (follower.following.includes(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Already following this user'
+      } as ApiResponse);
+    }
+
+    // Add to following/followers
+    follower.following.push(targetUserId);
+    targetUser.followers.push(followerId);
+
+    await follower.save();
+    await targetUser.save();
+
+    logger.info(`User ${followerId} followed user ${targetUserId}`);
+
+    return res.json({
+      success: true,
+      message: 'User followed successfully',
+      data: {
+        followerId,
+        targetUserId,
+        followingCount: follower.following.length,
+        followersCount: targetUser.followers.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error following user:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error following user',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// DELETE /api/users/:id/follow - Unfollow a user
+router.delete('/:id/follow', async (req, res) => {
+  try {
+    const { id: targetUserId } = req.params;
+    const { followerId } = req.body;
+
+    if (!followerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Follower ID is required'
+      } as ApiResponse);
+    }
+
+    // Get both users
+    const follower = await User.findOne({ id: followerId });
+    const targetUser = await User.findOne({ id: targetUserId });
+
+    if (!follower || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      } as ApiResponse);
+    }
+
+    // Remove from following/followers
+    follower.following = follower.following.filter(id => id !== targetUserId);
+    targetUser.followers = targetUser.followers.filter(id => id !== followerId);
+
+    await follower.save();
+    await targetUser.save();
+
+    logger.info(`User ${followerId} unfollowed user ${targetUserId}`);
+
+    return res.json({
+      success: true,
+      message: 'User unfollowed successfully',
+      data: {
+        followerId,
+        targetUserId,
+        followingCount: follower.following.length,
+        followersCount: targetUser.followers.length
+      }
+    } as ApiResponse<any>);
+
+  } catch (error: any) {
+    logger.error('Error unfollowing user:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error unfollowing user',
+      error: error.message
     } as ApiResponse);
   }
 });
