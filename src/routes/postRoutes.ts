@@ -6,6 +6,210 @@ import { ApiResponse } from '../types';
 
 const router = express.Router();
 
+// GET /api/posts/discovery - Get random posts from users not followed (Instagram-style)
+router.get('/discovery', async (req, res) => {
+  try {
+    const { userId, limit = 20, page = 1 } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required for discovery feed'
+      } as ApiResponse);
+    }
+
+    const limitNum = Math.min(parseInt(limit as string) || 20, 50); // Cap at 50
+    const pageNum = Math.max(parseInt(page as string) || 1, 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    console.log(`🔍 Discovery feed request - User: ${userId}, Limit: ${limitNum}, Page: ${pageNum}`);
+
+    // Step 1: Get users that current user is following
+    const currentUser = await User.findOne({ id: userId as string });
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      } as ApiResponse);
+    }
+
+    const followingIds = currentUser.following || [];
+    console.log(`👥 User is following ${followingIds.length} users: [${followingIds.join(', ')}]`);
+    console.log(`👤 Current user ID: ${userId}`);
+    console.log(`👤 Current user following array:`, followingIds);
+    console.log(`👤 Following array types:`, followingIds.map(id => typeof id));
+    
+    // Convert ObjectId references to string IDs for comparison
+    const followingUserIds = await User.find({ _id: { $in: followingIds } }).select('id');
+    const followingStringIds = followingUserIds.map(user => user.id);
+    console.log(`👥 Following user string IDs: [${followingStringIds.join(', ')}]`);
+    
+    // Create exclusion list (followed users + current user)
+    const excludeUserIds = [...followingStringIds, userId as string];
+    console.log(`🚫 Excluding users: [${excludeUserIds.join(', ')}]`);
+    console.log(`💖 Also excluding posts already liked by user: ${userId}`);
+
+    // Debug: Let's also check what posts exist and their user IDs
+    const allPosts = await Post.find({}).limit(10).select('userId username songName');
+    console.log(`🔍 Sample of all posts in database:`, allPosts.map(p => ({ userId: p.userId, username: p.username, song: p.songName })));
+
+    // Step 2: Get posts from users NOT followed AND not already liked by current user
+    const candidatePosts = await Post.find({
+      $and: [
+        {
+          userId: { 
+            $nin: excludeUserIds // Exclude followed users and current user
+          }
+        },
+        {
+          likes: {
+            $ne: userId as string // Exclude posts already liked by current user
+          }
+        }
+      ]
+    })
+    .sort({ createdAt: -1 }) // Start with most recent
+    .limit(limitNum * 3); // Get more candidates for scoring
+
+    console.log(`📝 Found ${candidatePosts.length} candidate posts from non-followed users (excluding already-liked posts)`);
+    
+    // Debug: Show which users the posts are from
+    const candidateUserIds = [...new Set(candidatePosts.map(post => post.userId))];
+    console.log(`👥 Candidate post authors: [${candidateUserIds.join(', ')}]`);
+    
+    // Debug: Show detailed info about each candidate post
+    candidatePosts.forEach((post, index) => {
+      console.log(`📄 Candidate ${index + 1}: userId="${post.userId}", username="${post.username}", song="${post.songName}"`);
+    });
+
+    // Step 3: Get user details for each post
+    const postUserIds = [...new Set(candidatePosts.map(post => post.userId))];
+    const users = await User.find({ id: { $in: postUserIds } })
+      .select('id displayName username profilePicture followers following');
+    
+    const userMap = new Map(users.map(user => [user.id, user]));
+
+    // Step 4: Calculate engagement scores
+    const scoredPosts = candidatePosts.map(post => {
+      const likes = post.likes?.length || 0;
+      const comments = 0; // Posts don't have comments field in current model
+      const user = userMap.get(post.userId);
+      const userFollowers = user?.followers?.length || 0;
+      
+      // Calculate recency score (newer posts get higher score)
+      const hoursSinceCreated = (Date.now() - new Date(post.createdAt).getTime()) / (1000 * 60 * 60);
+      const recencyScore = Math.max(0, 48 - hoursSinceCreated) / 48; // Decay over 48 hours
+      
+      
+      const baseEngagement = likes * 1.0; // Base engagement from likes
+      const userPopularity = Math.log(userFollowers + 1) * 0.5; // Logarithmic user popularity
+      const freshnessBonus = recencyScore * 3.0; // Strong recency bonus
+      const randomnessFactor = Math.random() * 1.0; // High randomness for discovery
+      
+      // Calculate final engagement score
+      const engagementScore = baseEngagement + userPopularity + freshnessBonus + randomnessFactor;
+      
+      console.log(`📊 Post ${post.id}: likes=${likes}, userFollowers=${userFollowers}, recency=${recencyScore.toFixed(2)}, score=${engagementScore.toFixed(2)}`);
+
+      return {
+        ...post.toObject(),
+        engagementScore,
+        debugInfo: {
+          baseEngagement,
+          userPopularity,
+          freshnessBonus,
+          randomnessFactor,
+          likes,
+          userFollowers,
+          hoursSinceCreated
+        }
+      };
+    });
+
+    // Step 5: Sort by engagement score and apply Instagram-style randomization
+    scoredPosts.sort((a, b) => b.engagementScore - a.engagementScore);
+    
+    // Apply additional randomization to top posts (Instagram-style)
+    const topPosts = scoredPosts.slice(0, limitNum * 2); // Get more candidates
+    const randomizedPosts = [];
+    
+    // Take top 30% as-is, then randomize the rest
+    const topCount = Math.ceil(topPosts.length * 0.3);
+    randomizedPosts.push(...topPosts.slice(0, topCount));
+    
+    // Shuffle the remaining posts
+    const remainingPosts = topPosts.slice(topCount);
+    for (let i = remainingPosts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = remainingPosts[i];
+      remainingPosts[i] = remainingPosts[j]!;
+      remainingPosts[j] = temp!;
+    }
+    randomizedPosts.push(...remainingPosts);
+    
+    console.log(`🎲 Applied randomization: top ${topCount} posts + ${remainingPosts.length} shuffled`);
+    
+    // Step 6: Format response with user details
+    const formattedPosts = randomizedPosts.slice(0, limitNum).map(post => {
+      const user = userMap.get(post.userId);
+      return {
+        id: post.id,
+        userId: post.userId,
+        username: user?.displayName || user?.username || 'Unknown User',
+        userAvatar: user?.profilePicture || 'https://i.pravatar.cc/150?img=1',
+        songName: post.songName,
+        artistName: post.artistName,
+        songImage: post.songImage,
+        description: post.description || '',
+        likes: post.likes || [],
+        comments: [], // Comments not implemented yet
+        likesCount: (post.likes || []).length,
+        commentsCount: 0, // Comments not implemented yet
+        isLiked: post.likes?.includes(userId as string) || false,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        engagementScore: post.engagementScore
+      };
+    });
+
+    // Get total count for pagination (excluding followed users and already-liked posts)
+    const totalCount = await Post.countDocuments({
+      $and: [
+        {
+          userId: { $nin: excludeUserIds }
+        },
+        {
+          likes: {
+            $ne: userId as string
+          }
+        }
+      ]
+    });
+
+    console.log(`✅ Discovery feed: Returning ${formattedPosts.length} posts`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Discovery posts retrieved successfully',
+      data: formattedPosts,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum)
+      }
+    } as ApiResponse<any[]>);
+
+  } catch (error: any) {
+    console.error('Error getting discovery posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error retrieving discovery posts',
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 // Helper function to get likes with usernames
 async function getLikesWithNames(likes: string[]) {
   if (!likes || likes.length === 0) return [];
