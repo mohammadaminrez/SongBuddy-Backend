@@ -47,21 +47,31 @@ router.get('/discovery', async (req, res) => {
     // Create exclusion list (followed users + current user)
     const excludeUserIds = [...followingStringIds, userId as string];
     console.log(`🚫 Excluding users: [${excludeUserIds.join(', ')}]`);
+    console.log(`💖 Also excluding posts already liked by user: ${userId}`);
 
     // Debug: Let's also check what posts exist and their user IDs
     const allPosts = await Post.find({}).limit(10).select('userId username songName');
     console.log(`🔍 Sample of all posts in database:`, allPosts.map(p => ({ userId: p.userId, username: p.username, song: p.songName })));
 
-    // Step 2: Get posts from users NOT followed (exclude current user too)
+    // Step 2: Get posts from users NOT followed AND not already liked by current user
     const candidatePosts = await Post.find({
-      userId: { 
-        $nin: excludeUserIds // Exclude followed users and current user
-      }
+      $and: [
+        {
+          userId: { 
+            $nin: excludeUserIds // Exclude followed users and current user
+          }
+        },
+        {
+          likes: {
+            $ne: userId as string // Exclude posts already liked by current user
+          }
+        }
+      ]
     })
     .sort({ createdAt: -1 }) // Start with most recent
     .limit(limitNum * 3); // Get more candidates for scoring
 
-    console.log(`📝 Found ${candidatePosts.length} candidate posts from non-followed users`);
+    console.log(`📝 Found ${candidatePosts.length} candidate posts from non-followed users (excluding already-liked posts)`);
     
     // Debug: Show which users the posts are from
     const candidateUserIds = [...new Set(candidatePosts.map(post => post.userId))];
@@ -162,9 +172,18 @@ router.get('/discovery', async (req, res) => {
       };
     });
 
-    // Get total count for pagination
+    // Get total count for pagination (excluding followed users and already-liked posts)
     const totalCount = await Post.countDocuments({
-      userId: { $nin: excludeUserIds }
+      $and: [
+        {
+          userId: { $nin: excludeUserIds }
+        },
+        {
+          likes: {
+            $ne: userId as string
+          }
+        }
+      ]
     });
 
     console.log(`✅ Discovery feed: Returning ${formattedPosts.length} posts`);
