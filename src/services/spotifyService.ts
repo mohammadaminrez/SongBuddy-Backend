@@ -126,6 +126,25 @@ class SpotifyService {
     }
   }
 
+  public async getUserTopArtists(
+    accessToken: string, 
+    timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term',
+    limit: number = 20
+  ): Promise<any[]> {
+    try {
+      this.spotifyApi.setAccessToken(accessToken);
+      const data = await this.spotifyApi.getMyTopArtists({
+        time_range: timeRange,
+        limit
+      });
+      
+      return data.body.items;
+    } catch (error) {
+      logger.error('Error fetching user top artists:', error);
+      throw new Error('Failed to fetch user top artists');
+    }
+  }
+
   public async getUserRecentlyPlayed(
     accessToken: string, 
     limit: number = 20
