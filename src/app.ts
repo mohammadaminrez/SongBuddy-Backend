@@ -34,6 +34,31 @@ app.get('/health', (req, res) => {
   });
 });
 
+// API health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check database connection
+    const dbStatus = await databaseService.isConnected();
+    
+    res.json({
+      success: true,
+      message: 'SongBuddy Backend API is healthy!',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      database: dbStatus ? 'connected' : 'disconnected',
+      uptime: process.uptime(),
+      memory: process.memoryUsage()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Health check failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 
 // Simple test endpoint for Flutter connection
 app.get('/api/test', (req, res) => {
