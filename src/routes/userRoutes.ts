@@ -58,7 +58,7 @@ router.get('/search', async (req, res) => {
         }
       ]
     })
-    .select('id displayName email username profilePicture country bio followers following lastActiveAt createdAt')
+    .select('id displayName email username profilePicture country bio currentlyPlaying topArtists topTracks recentlyPlayed followers following lastActiveAt createdAt')
     .sort({ displayName: 1 })
     .skip(skip)
     .limit(limitNum);
@@ -86,6 +86,10 @@ router.get('/search', async (req, res) => {
       profilePicture: user.profilePicture,
       country: user.country,
       bio: user.bio,
+      currentlyPlaying: user.currentlyPlaying,
+      topArtists: user.topArtists,
+      topTracks: user.topTracks,
+      recentlyPlayed: user.recentlyPlayed,
       followersCount: user.followers ? user.followers.length : 0,
       followingCount: user.following ? user.following.length : 0,
       lastActiveAt: user.lastActiveAt,
@@ -317,6 +321,10 @@ router.get('/:id/profile', async (req, res) => {
           profilePicture: user.profilePicture,
           country: user.country,
           bio: user.bio,
+          currentlyPlaying: user.currentlyPlaying,
+          topArtists: user.topArtists,
+          topTracks: user.topTracks,
+          recentlyPlayed: user.recentlyPlayed,
           followersCount: user.followers.length,
           followingCount: user.following.length,
           postsCount: user.posts.length,
@@ -524,7 +532,7 @@ router.get('/', async (req, res) => {
     const skip = (page - 1) * limit;
 
     const users = await User.find({ isActive: true })
-      .select('id displayName email username profilePicture country bio followers following lastActiveAt createdAt')
+      .select('id displayName email username profilePicture country bio currentlyPlaying topArtists topTracks recentlyPlayed followers following lastActiveAt createdAt')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -540,6 +548,10 @@ router.get('/', async (req, res) => {
       profilePicture: user.profilePicture,
       country: user.country,
       bio: user.bio,
+      currentlyPlaying: user.currentlyPlaying,
+      topArtists: user.topArtists,
+      topTracks: user.topTracks,
+      recentlyPlayed: user.recentlyPlayed,
       followersCount: user.followers.length,
       followingCount: user.following.length,
       lastActiveAt: user.lastActiveAt,

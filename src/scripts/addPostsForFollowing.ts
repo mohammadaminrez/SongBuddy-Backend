@@ -14,7 +14,7 @@ async function addPostsForFollowing() {
     await databaseService.connect();
     logger.info('Connected to MongoDB for adding posts to following users');
 
-    const existingUserId = '31ey4rngsv4lachasdm4awbpsu2m';
+    const existingUserId = '31zyexjvpwecwru3w63q27hww5nu';
     
     // Find the existing user and populate their following
     const existingUser = await User.findOne({ id: existingUserId }).populate('following');
