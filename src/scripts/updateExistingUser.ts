@@ -14,8 +14,7 @@ async function updateExistingUser() {
     await databaseService.connect();
     logger.info('Connected to MongoDB for updating existing user');
 
-    const existingUserId = '31zyexjvpwecwru3w63q27hww5nu'; // mohsen
-    //  const existingUserId = '31ey4rngsv4lachasdm4awbpsu2m'; // amin
+    const existingUserId = '31zyexjvpwecwru3w63q27hww5nu';
     // Find the existing user
     const existingUser = await User.findOne({ id: existingUserId });
     if (!existingUser) {
